@@ -171,16 +171,23 @@ func BuildPagesAssetURL(pagesHost string, assetPath string) string {
 
 // BuildScreenshotViaPlugin 调用 screenshot 插件生成截图 URL
 func BuildScreenshotViaPlugin(host HostCaller, pageURL string) (string, error) {
+	return BuildScreenshotViaPluginWithTransparent(host, pageURL, true)
+}
+
+// BuildScreenshotViaPluginWithTransparent 调用 screenshot 插件生成截图 URL（支持透明背景）
+func BuildScreenshotViaPluginWithTransparent(host HostCaller, pageURL string, transparent bool) (string, error) {
 	if host == nil {
 		return "", fmt.Errorf("screenshot 调用失败: host 为 nil")
 	}
 	if strings.TrimSpace(pageURL) == "" {
 		return "", fmt.Errorf("screenshot 调用失败: pageURL 为空")
 	}
-	hclog.L().Info("[Utils] 调用 external.screenshot.build_url", "page_url", pageURL)
+	hclog.L().Info("[Utils] 调用 external.screenshot.build_url", "page_url", pageURL, "transparent", transparent)
 	result, err := host.CallDependency(context.Background(), "external.screenshot", "screenshot.build_url", map[string]any{
-		"page_url": pageURL,
-		"selector": "#screenshot-wrapper",
+		"page_url":    pageURL,
+		"selector":    "#screenshot-wrapper",
+		"format":      "png",
+		"transparent": transparent,
 	})
 	if err != nil {
 		return "", fmt.Errorf("screenshot 插件调用失败: %w", err)
