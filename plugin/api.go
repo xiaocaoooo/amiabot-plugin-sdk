@@ -31,6 +31,7 @@ type Descriptor struct {
 	Config       *ConfigSpec       `json:"config,omitempty"`
 	Commands     []CommandListener `json:"commands"`
 	Events       []EventListener   `json:"events"`
+	Crons        []CronListener    `json:"crons"`
 }
 
 // ConfigSpec describes a plugin's configuration schema and defaults.
@@ -62,6 +63,15 @@ type EventListener struct {
 	ID          string `json:"id"`
 	Description string `json:"description"`
 	Event       string `json:"event"`
+	Handler     string `json:"handler"`
+}
+
+// CronListener defines a scheduled task.
+type CronListener struct {
+	Name        string `json:"name"`
+	ID          string `json:"id"`
+	Description string `json:"description"`
+	Schedule    string `json:"schedule"`
 	Handler     string `json:"handler"`
 }
 
