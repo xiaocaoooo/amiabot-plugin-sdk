@@ -41,38 +41,48 @@ func SanitizeError(err error) string {
 }
 
 // SendError 发送脱敏后的错误消息给用户
-func SendError(host HostCaller, msgType string, groupID any, userID any, prefix string, err error) {
+func SendError(ctx context.Context, host HostCaller, msgType string, groupID any, userID any, prefix string, err error) {
 	sanitized := SanitizeError(err)
 	hclog.L().Error("[Utils] sendError", "prefix", prefix, "raw_error", err, "sanitized", sanitized)
-	SendText(host, msgType, groupID, userID, prefix+": "+sanitized)
+	SendText(ctx, host, msgType, groupID, userID, prefix+": "+sanitized)
 }
 
 // SendText 发送文本消息
-func SendText(host HostCaller, msgType string, groupID any, userID any, text string) {
+func SendText(ctx context.Context, host HostCaller, msgType string, groupID any, userID any, text string) {
 	if host == nil || text == "" {
 		return
 	}
 	if msgType == "group" {
-		_, _ = host.CallOneBot(context.Background(), "send_group_msg", map[string]any{
+		_, err := host.CallOneBot(ctx, "send_group_msg", map[string]any{
 			"group_id": groupID,
 			"message":  text,
 		})
+		if err != nil {
+			hclog.L().Error("[Utils] send_group_msg 失败", "error", err)
+		} else {
+			hclog.L().Info("[Utils] send_group_msg 成功")
+		}
 	} else {
-		_, _ = host.CallOneBot(context.Background(), "send_private_msg", map[string]any{
+		_, err := host.CallOneBot(ctx, "send_private_msg", map[string]any{
 			"user_id": userID,
 			"message": text,
 		})
+		if err != nil {
+			hclog.L().Error("[Utils] send_private_msg 失败", "error", err)
+		} else {
+			hclog.L().Info("[Utils] send_private_msg 成功")
+		}
 	}
 }
 
 // SendImage 发送图片消息
-func SendImage(host HostCaller, msgType string, groupID any, userID any, urlStr string) error {
+func SendImage(ctx context.Context, host HostCaller, msgType string, groupID any, userID any, urlStr string) error {
 	if host == nil {
 		return nil
 	}
 	hclog.L().Info("[Utils] 发送图片消息", "msg_type", msgType, "group_id", groupID, "user_id", userID, "url", urlStr)
 	if msgType == "group" {
-		_, err := host.CallOneBot(context.Background(), "send_group_msg", map[string]any{
+		_, err := host.CallOneBot(ctx, "send_group_msg", map[string]any{
 			"group_id": groupID,
 			"message": []map[string]any{
 				{"type": "image", "data": map[string]any{"file": urlStr}},
@@ -85,7 +95,7 @@ func SendImage(host HostCaller, msgType string, groupID any, userID any, urlStr 
 		}
 		return err
 	}
-	_, err := host.CallOneBot(context.Background(), "send_private_msg", map[string]any{
+	_, err := host.CallOneBot(ctx, "send_private_msg", map[string]any{
 		"user_id": userID,
 		"message": []map[string]any{
 			{"type": "image", "data": map[string]any{"file": urlStr}},
@@ -100,21 +110,31 @@ func SendImage(host HostCaller, msgType string, groupID any, userID any, urlStr 
 }
 
 // SendForward 发送合并转发消息
-func SendForward(host HostCaller, msgType string, groupID any, userID any, nodes []map[string]any) error {
+func SendForward(ctx context.Context, host HostCaller, msgType string, groupID any, userID any, nodes []map[string]any) error {
 	if host == nil || len(nodes) == 0 {
 		return nil
 	}
 	if msgType == "group" {
-		_, err := host.CallOneBot(context.Background(), "send_group_forward_msg", map[string]any{
+		_, err := host.CallOneBot(ctx, "send_group_forward_msg", map[string]any{
 			"group_id": groupID,
 			"messages": nodes,
 		})
+		if err != nil {
+			hclog.L().Error("[Utils] send_group_forward_msg 失败", "error", err)
+		} else {
+			hclog.L().Info("[Utils] send_group_forward_msg 成功")
+		}
 		return err
 	}
-	_, err := host.CallOneBot(context.Background(), "send_private_forward_msg", map[string]any{
+	_, err := host.CallOneBot(ctx, "send_private_forward_msg", map[string]any{
 		"user_id":  userID,
 		"messages": nodes,
 	})
+	if err != nil {
+		hclog.L().Error("[Utils] send_private_forward_msg 失败", "error", err)
+	} else {
+		hclog.L().Info("[Utils] send_private_forward_msg 成功")
+	}
 	return err
 }
 
@@ -170,12 +190,12 @@ func BuildPagesAssetURL(pagesHost string, assetPath string) string {
 }
 
 // BuildScreenshotViaPlugin 调用 screenshot 插件生成截图 URL
-func BuildScreenshotViaPlugin(host HostCaller, pageURL string) (string, error) {
-	return BuildScreenshotViaPluginWithTransparent(host, pageURL, true)
+func BuildScreenshotViaPlugin(ctx context.Context, host HostCaller, pageURL string) (string, error) {
+	return BuildScreenshotViaPluginWithTransparent(ctx, host, pageURL, true)
 }
 
 // BuildScreenshotViaPluginWithTransparent 调用 screenshot 插件生成截图 URL（支持透明背景）
-func BuildScreenshotViaPluginWithTransparent(host HostCaller, pageURL string, transparent bool) (string, error) {
+func BuildScreenshotViaPluginWithTransparent(ctx context.Context, host HostCaller, pageURL string, transparent bool) (string, error) {
 	if host == nil {
 		return "", fmt.Errorf("screenshot 调用失败: host 为 nil")
 	}
@@ -183,7 +203,7 @@ func BuildScreenshotViaPluginWithTransparent(host HostCaller, pageURL string, tr
 		return "", fmt.Errorf("screenshot 调用失败: pageURL 为空")
 	}
 	hclog.L().Info("[Utils] 调用 external.screenshot.build_url", "page_url", pageURL, "transparent", transparent)
-	result, err := host.CallDependency(context.Background(), "external.screenshot", "screenshot.build_url", map[string]any{
+	result, err := host.CallDependency(ctx, "external.screenshot", "screenshot.build_url", map[string]any{
 		"page_url":    pageURL,
 		"selector":    "#screenshot-wrapper",
 		"format":      "png",

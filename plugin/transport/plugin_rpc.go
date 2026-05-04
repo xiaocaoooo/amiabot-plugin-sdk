@@ -10,6 +10,50 @@ import (
 	papi "github.com/xiaocaoooo/amiabot-plugin-sdk/plugin"
 )
 
+// Context keys for self_id and trace_id
+type contextKey string
+
+const (
+	contextKeySelfID  contextKey = "nyanyabot_self_id"
+	contextKeyTraceID contextKey = "nyanyabot_trace_id"
+)
+
+// WithSelfID injects self_id into context
+func WithSelfID(ctx context.Context, selfID int64) context.Context {
+	return context.WithValue(ctx, contextKeySelfID, selfID)
+}
+
+// GetSelfID extracts self_id from context, returns 0 if not found
+func GetSelfID(ctx context.Context) int64 {
+	if ctx == nil {
+		return 0
+	}
+	if v := ctx.Value(contextKeySelfID); v != nil {
+		if selfID, ok := v.(int64); ok {
+			return selfID
+		}
+	}
+	return 0
+}
+
+// WithTraceID injects trace_id into context
+func WithTraceID(ctx context.Context, traceID string) context.Context {
+	return context.WithValue(ctx, contextKeyTraceID, traceID)
+}
+
+// GetTraceID extracts trace_id from context, returns empty string if not found
+func GetTraceID(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	if v := ctx.Value(contextKeyTraceID); v != nil {
+		if traceID, ok := v.(string); ok {
+			return traceID
+		}
+	}
+	return ""
+}
+
 // ===== Plugin-side service (called by host) =====
 
 type PluginRPCServer struct {
@@ -42,7 +86,33 @@ func (s *PluginRPCServer) Invoke(args InvokeArgs, resp *InvokeReply) error {
 }
 
 func (s *PluginRPCServer) Handle(args HandleArgs, resp *HandleReply) error {
-	r, err := s.Impl.Handle(context.Background(), args.ListenerID, args.EventRawJSON, args.Match)
+	// 从事件 JSON 中提取 self_id
+	var selfID int64
+	var eventData map[string]interface{}
+	if err := json.Unmarshal(args.EventRawJSON, &eventData); err == nil {
+		if selfIDVal, ok := eventData["self_id"]; ok {
+			switch v := selfIDVal.(type) {
+			case float64:
+				selfID = int64(v)
+			case int64:
+				selfID = v
+			case int:
+				selfID = int64(v)
+			case json.Number:
+				if i, err := v.Int64(); err == nil {
+					selfID = i
+				}
+			}
+		}
+	}
+
+	// 构建带有 self_id 的 context（SDK 版本暂不处理 trace_id）
+	ctx := context.Background()
+	if selfID != 0 {
+		ctx = WithSelfID(ctx, selfID)
+	}
+
+	r, err := s.Impl.Handle(ctx, args.ListenerID, args.EventRawJSON, args.Match)
 	if err != nil {
 		return err
 	}
@@ -157,6 +227,7 @@ func (s *HostRPCServer) CallOneBot(args CallOneBotArgs, resp *CallOneBotReply) e
 			return err
 		}
 	}
+	// SDK 版本：直接使用 args.SelfID，不处理 trace_id
 	r, err := s.Impl.CallOneBot(context.Background(), args.Action, params)
 	if err != nil {
 		return err
@@ -187,13 +258,16 @@ type HostRPCClient struct {
 }
 
 func (c *HostRPCClient) CallOneBot(ctx context.Context, action string, params any) (ob11.APIResponse, error) {
-	_ = ctx
 	b, err := json.Marshal(params)
 	if err != nil {
 		return ob11.APIResponse{}, err
 	}
 	var resp CallOneBotReply
-	if err := c.client.Call("Plugin.CallOneBot", CallOneBotArgs{Action: action, Params: b}, &resp); err != nil {
+
+	// 从 context 中提取 SelfID
+	selfID := GetSelfID(ctx)
+
+	if err := c.client.Call("Plugin.CallOneBot", CallOneBotArgs{Action: action, Params: b, SelfID: selfID}, &resp); err != nil {
 		return ob11.APIResponse{}, err
 	}
 	return resp.Resp, nil

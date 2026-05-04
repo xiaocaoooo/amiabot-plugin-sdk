@@ -37,6 +37,7 @@ type InvokeReply struct {
 type CallOneBotArgs struct {
 	Action string          `json:"action"`
 	Params json.RawMessage `json:"params"`
+	SelfID int64           `json:"self_id,omitempty"` // 可选：指定目标 bot；0 表示使用上下文推断
 }
 
 type CallOneBotReply struct {
